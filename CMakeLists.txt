@@ -23,3 +23,7 @@ target_link_libraries(${PROJECT_NAME} glfw)
 
 add_subdirectory(vendor/glm)
 target_link_libraries(${PROJECT_NAME} glm)
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+        "VULKAN_HPP_NO_STRUCT_CONSTRUCTORS=1"
+)
