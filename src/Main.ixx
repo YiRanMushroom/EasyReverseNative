@@ -53,6 +53,7 @@ private:
     [[nodiscard]] vk::PresentModeKHR ChooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) const;
     [[nodiscard]] vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) const;
     void CreateSwapChain();
+    void CreateImageViews();
 
     std::optional<glfw::Window> m_Window;
     vk::raii::Instance m_VkInstance{nullptr};
@@ -66,6 +67,7 @@ private:
     std::vector<vk::Image> m_SwapChainImages;
     vk::Format m_SwapChainImageFormat;
     vk::Extent2D m_SwapChainExtent;
+    std::vector<vk::raii::ImageView> m_SwapChainImageViews;
 
 private:
     const inline static std::vector<const char*> s_ValidationLayers = {

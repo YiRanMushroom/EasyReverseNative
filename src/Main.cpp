@@ -69,6 +69,7 @@ void HelloTriangleApplication::InitVulkan() {
     PickPhysicalDevice();
     CreateLogicalDevice();
     CreateSwapChain();
+    CreateImageViews();
 }
 
 void HelloTriangleApplication::CreateInstance() {
@@ -286,6 +287,35 @@ void HelloTriangleApplication::CreateSwapChain() {
     m_SwapChainImages = m_SwapChain.getImages();
     m_SwapChainImageFormat = surfaceFormat.format;
     m_SwapChainExtent = extent;
+}
+
+void HelloTriangleApplication::CreateImageViews() {
+    m_SwapChainImageViews.reserve(m_SwapChainImages.size());
+
+    for (const auto& image : m_SwapChainImages) {
+        vk::ImageViewCreateInfo viewInfo{
+            .pNext = nullptr,
+            .flags = {},
+            .image = image,
+            .viewType = vk::ImageViewType::e2D,
+            .format = m_SwapChainImageFormat,
+            .components = {
+                .r = vk::ComponentSwizzle::eIdentity,
+                .g = vk::ComponentSwizzle::eIdentity,
+                .b = vk::ComponentSwizzle::eIdentity,
+                .a = vk::ComponentSwizzle::eIdentity
+            },
+            .subresourceRange = {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            }
+        };
+
+        m_SwapChainImageViews.push_back(m_Device.createImageView(viewInfo));
+    }
 }
 
 void HelloTriangleApplication::PickPhysicalDevice() {
