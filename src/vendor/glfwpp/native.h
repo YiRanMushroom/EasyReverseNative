@@ -5,7 +5,10 @@
 #include <GLFW/glfw3native.h>
 
 #include "monitor.h"
+#define NOMINMAX
 #include "window.h"
+#undef min
+#undef max
 
 namespace glfw
 {

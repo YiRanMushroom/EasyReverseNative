@@ -26,4 +26,7 @@ target_link_libraries(${PROJECT_NAME} glm)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
         "VULKAN_HPP_NO_STRUCT_CONSTRUCTORS=1"
+        "GLFW_EXPOSE_NATIVE_WIN32=1"
+        "VK_USE_PLATFORM_WIN32_KHR=1"
+        "GLFW_INCLUDE_VULKAN=1"
 )
