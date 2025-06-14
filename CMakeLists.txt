@@ -16,5 +16,10 @@ add_executable(
         ${MODULE_FILES})
 
 find_package(Vulkan REQUIRED)
-#target_include_directories(${PROJECT_NAME} PUBLIC ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} Vulkan::Vulkan)
+
+add_subdirectory(vendor/glfw)
+target_link_libraries(${PROJECT_NAME} glfw)
+
+add_subdirectory(vendor/glm)
+target_link_libraries(${PROJECT_NAME} glm)
