@@ -48,6 +48,10 @@ HelloTriangleApplication::HelloTriangleApplication() {
 void HelloTriangleApplication::MainLoop() {
     while (!m_Window->shouldClose()) {
         glfw::pollEvents();
+        if (!m_ShouldUpdate) {
+            continue;
+            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        }
         DrawFrame();
         // m_Device.waitIdle();
     }
@@ -56,6 +60,8 @@ void HelloTriangleApplication::MainLoop() {
 }
 
 void HelloTriangleApplication::Cleanup() {
+    CleanupSwapChain();
+
     ShutdownImGuiForMyProgram();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -63,11 +69,28 @@ void HelloTriangleApplication::Cleanup() {
 
 void HelloTriangleApplication::InitializeWindow() {
     glfw::WindowHints{
-        .resizable = false,
+        .resizable = true,
         .clientApi = glfw::ClientApi::None,
     }.apply();
 
     m_Window = glfw::Window{1920, 1080, "Vulkan", nullptr, nullptr};
+
+    m_Window->framebufferSizeEvent.setCallback([this](glfw::Window &window, int width, int height) {
+        if (width > 0 && height > 0) {
+            m_ShouldUpdate = true;
+            m_Window->setShouldClose(false);
+            RecreateSwapChain();
+        } else {
+            m_ShouldUpdate = false;
+        }
+
+    });
+
+    // m_Window->mouseButtonEvent.setCallback([this](glfw::Window &window, glfw::MouseButton button, glfw::MouseButtonState state, glfw::ModifierKeyBit mods) {
+    //     if (button == glfw::MouseButton::Left) {
+    //         std::cout << "Left mouse button " << (state == glfw::MouseButtonState::Press ? "pressed" : "released") << std::endl;
+    //     }
+    // });
 }
 
 void HelloTriangleApplication::InitVulkan() {
@@ -395,6 +418,9 @@ void HelloTriangleApplication::DrawImGui() {
     ImGui::Text("Frame Rate: %.1f FPS", ImGui::GetIO().Framerate);
     ImGui::Text("Swap Chain Image Count: %zu", m_SwapChainImages.size());
     ImGui::Text("Current Frame: %zu", m_CurrentFrame);
+    if (ImGui::Button("Recreate Swap Chain")) {
+        RecreateSwapChain();
+    }
     ImGui::End();
 }
 
@@ -785,6 +811,18 @@ void HelloTriangleApplication::DrawFrame() {
         std::numeric_limits<uint64_t>::max(), m_ImageAvailableSemaphores[m_CurrentFrame], nullptr
     );
 
+    if (resultAcquireImage != vk::Result::eSuccess &&
+        resultAcquireImage != vk::Result::eSuboptimalKHR) {
+
+        if (resultAcquireImage == vk::Result::eErrorOutOfDateKHR) {
+            RecreateSwapChain();
+            return;
+        } else {
+            std::cerr << "Failed to acquire swap chain image: " << vk::to_string(resultAcquireImage) << std::endl;
+            return;
+        }
+    }
+
     m_Device.resetFences(*m_InFlightFences[m_CurrentFrame]);
 
     m_CommandBuffers[m_CurrentFrame].reset();
@@ -825,6 +863,25 @@ void HelloTriangleApplication::DrawFrame() {
         ImGui::UpdatePlatformWindows();
         ImGui::RenderPlatformWindowsDefault();
     }
+}
+
+void HelloTriangleApplication::RecreateSwapChain() {
+    m_Device.waitIdle();
+
+    CleanupSwapChain();
+
+    CreateSwapChain();
+    CreateImageViews();
+    CreateFramebuffers();
+
+    std::cout << "Swap chain recreated successfully." << std::endl;
+}
+void HelloTriangleApplication::CleanupSwapChain() {
+    m_SwapChainFramebuffers.clear();
+    m_SwapChainImageViews.clear();
+    m_SwapChainImages.clear();
+
+    m_SwapChain.clear();
 }
 
 void HelloTriangleApplication::PickPhysicalDevice() {

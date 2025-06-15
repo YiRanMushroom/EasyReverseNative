@@ -76,6 +76,10 @@ private:
 
     void DrawFrame();
 
+    // Swap chain recreation
+    void RecreateSwapChain();
+    void CleanupSwapChain();
+
     std::optional<glfw::Window> m_Window;
     vk::raii::SurfaceKHR m_Surface{nullptr};
     vk::raii::DebugUtilsMessengerEXT m_DebugMessenger{nullptr};
@@ -107,6 +111,8 @@ private:
     size_t m_CurrentFrame = 0;
 
     std::vector<vk::raii::CommandBuffer> m_CommandBuffers;
+
+    bool m_ShouldUpdate = true;
 
 private:
     const inline static std::vector<const char*> s_ValidationLayers = {
