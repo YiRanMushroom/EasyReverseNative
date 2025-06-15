@@ -6,3 +6,7 @@
 	path = vendor/glm
 	url = https://github.com/icaven/glm
 	branch = master
+[submodule "vendor/imgui"]
+	path = vendor/imgui
+	url = https://github.com/YiRanMushroom/imgui
+	branch = docking
