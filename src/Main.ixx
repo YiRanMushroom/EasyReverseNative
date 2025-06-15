@@ -36,7 +36,7 @@ class HelloTriangleApplication;
 class ImGuiImageRenderTarget {
     friend class HelloTriangleApplication;
 public:
-    ImGuiImageRenderTarget(HelloTriangleApplication* app);
+    ImGuiImageRenderTarget(HelloTriangleApplication* app, uint32_t width = 960, uint32_t height = 640);
 
 public:
     void Rebuild();
@@ -50,10 +50,11 @@ public:
         vk::ClearColorValue(std::array<float, 4>{1.0f, 1.0f, 1.0f, 1.0f})
     };
 
-    void RenderImGui();
+    ~ImGuiImageRenderTarget();
+
 private:
     void CreateImageAndView();
-    void CreateSampler();
+
     void CreateRenderPass();
     void CreateGraphicsPipeline();
     void CreateFramebuffer();
@@ -75,7 +76,6 @@ private:
     vk::raii::Fence m_RenderFinishedFence{nullptr};
     vk::raii::CommandBuffer m_CommandBuffer{nullptr};
 
-    vk::raii::Sampler m_Sampler{nullptr};
 
     vk::DescriptorSet m_ImageDescriptorSet{nullptr};
     VkDescriptorSet m_SetHandler;
@@ -117,6 +117,8 @@ private:
     void CreateSwapChain();
     void CreateImageViews();
 
+    void CreateSampler();
+
     void InitImGui();
     void DrawImGui();
     void BeginImGuiFrame();
@@ -139,6 +141,7 @@ private:
     // Swap chain recreation
     void RecreateSwapChain();
     void CleanupSwapChain();
+    void RenderImGuiFrameBuffer();
 
     std::optional<glfw::Window> m_Window;
     vk::raii::SurfaceKHR m_Surface{nullptr};
@@ -148,6 +151,8 @@ private:
     vk::raii::Queue m_GraphicsQueue{nullptr};
     vk::raii::Queue m_PresentQueue{nullptr};
     vk::raii::SwapchainKHR m_SwapChain{nullptr};
+
+    vk::raii::Sampler m_Sampler{nullptr};
 
     std::vector<vk::Image> m_SwapChainImages;
     vk::Format m_SwapChainImageFormat;
@@ -160,20 +165,17 @@ private:
     std::vector<vk::raii::Framebuffer> m_SwapChainFramebuffers;
 
     vk::raii::CommandPool m_CommandPool{nullptr};
+    std::vector<std::shared_ptr<ImGuiImageRenderTarget>> m_DependentRenderTargets;
+    std::vector<std::vector<std::shared_ptr<ImGuiImageRenderTarget>>> m_ImageViewDependentRenderTargetsPerFrameBuffer;
 
-    // synchronization objects
-    // vk::raii::Semaphore m_ImageAvailableSemaphore{nullptr};
-    // vk::raii::Semaphore m_RenderFinishedSemaphore{nullptr};
-    // vk::raii::Fence m_InFlightFence{nullptr};
     std::vector<vk::raii::Semaphore> m_ImageAvailableSemaphores;
     std::vector<vk::raii::Semaphore> m_RenderFinishedSemaphores;
     std::vector<vk::raii::Fence> m_InFlightFences;
-    // std::vector<vk::Fence> m_ImagesInFlight;
     size_t m_CurrentFrame = 0;
     std::vector<vk::raii::CommandBuffer> m_CommandBuffers;
     bool m_ShouldUpdate = true;
 
-    std::unique_ptr<ImGuiImageRenderTarget> m_ImGuiImageRenderTarget;
+    std::shared_ptr<ImGuiImageRenderTarget> m_ImGuiImageRenderTarget;
 
 private:
     const inline static std::vector<const char*> s_ValidationLayers = {

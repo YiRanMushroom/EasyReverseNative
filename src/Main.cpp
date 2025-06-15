@@ -10,14 +10,17 @@ bool QueueFamilyIndices::IsComplete() const {
     return GraphicsFamily.has_value() && PresentFamily.has_value();
 }
 
-ImGuiImageRenderTarget::ImGuiImageRenderTarget(HelloTriangleApplication *app) : m_App(app) {
+ImGuiImageRenderTarget::ImGuiImageRenderTarget(HelloTriangleApplication *app, uint32_t width, uint32_t height)
+    : m_App(app), m_RenderArea{
+        .offset = vk::Offset2D{0, 0},
+        .extent = vk::Extent2D{width, height}
+    } {
     Rebuild();
 }
 
 void ImGuiImageRenderTarget::Rebuild() {
     assert(m_App != nullptr && "HelloTriangleApplication pointer cannot be null");
     CreateImageAndView();
-    CreateSampler();
     CreateRenderPass();
     CreateGraphicsPipeline();
     CreateFramebuffer();
@@ -71,19 +74,10 @@ vk::Fence ImGuiImageRenderTarget::GetFence() const {
     return *m_RenderFinishedFence;
 }
 
-void ImGuiImageRenderTarget::RenderImGui() {
-    ImGui::Begin("ImGui Image Render Target");
-    auto [width, height] = ImGui::GetContentRegionAvail();
-    ImTextureID id = reinterpret_cast<ImTextureID>(m_SetHandler);
-    ImGui::Image(id, ImVec2{static_cast<float>(m_RenderArea.extent.width), static_cast<float>(m_RenderArea.extent.height)});
-    ImGui::End();
-
-    if (width > 0 && height > 0) {
-        if (m_RenderArea.extent.width != width || m_RenderArea.extent.height != height) {
-            m_RenderArea.extent.width = static_cast<uint32_t>(width);
-            m_RenderArea.extent.height = static_cast<uint32_t>(height);
-            m_NeedsRebuild = true;
-        }
+ImGuiImageRenderTarget::~ImGuiImageRenderTarget()  {
+    if (m_App) {
+        m_App->m_Device.waitIdle();
+        ImGui_ImplVulkan_RemoveTexture(m_SetHandler);
     }
 }
 
@@ -163,7 +157,7 @@ void ImGuiImageRenderTarget::CreateImageAndView() {
     m_ImageView = m_App->m_Device.createImageView(viewInfo).value();
 }
 
-void ImGuiImageRenderTarget::CreateSampler() {
+void HelloTriangleApplication::CreateSampler() {
     vk::SamplerCreateInfo samplerInfo{
         .sType = vk::StructureType::eSamplerCreateInfo,
         .pNext = nullptr,
@@ -183,7 +177,7 @@ void ImGuiImageRenderTarget::CreateSampler() {
         .borderColor = vk::BorderColor::eIntOpaqueBlack, // Adjust as needed
     };
 
-    m_Sampler = m_App->m_Device.createSampler(samplerInfo).value();
+    m_Sampler = m_Device.createSampler(samplerInfo).value();
 }
 
 void ImGuiImageRenderTarget::CreateRenderPass() {
@@ -440,7 +434,7 @@ void ImGuiImageRenderTarget::CreateCommandBuffer() {
 
 void ImGuiImageRenderTarget::CreateDescriptorSetLayout() {
     m_ImageDescriptorSet = ImGui_ImplVulkan_AddTexture(
-        *m_Sampler,
+        *m_App->m_Sampler,
         *m_ImageView,
         static_cast<VkImageLayout>(vk::ImageLayout::eShaderReadOnlyOptimal)
     );
@@ -615,6 +609,7 @@ void HelloTriangleApplication::MainLoop() {
             continue;
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
         }
+        m_DependentRenderTargets.clear();
         DrawFrame();
         // m_Device.waitIdle();
     }
@@ -623,6 +618,10 @@ void HelloTriangleApplication::MainLoop() {
 }
 
 void HelloTriangleApplication::Cleanup() {
+    m_DependentRenderTargets.clear();
+    m_ImageViewDependentRenderTargetsPerFrameBuffer.clear();
+    m_ImGuiImageRenderTarget.reset();
+
     CleanupSwapChain();
 
     ShutdownImGuiForMyProgram();
@@ -658,6 +657,8 @@ void HelloTriangleApplication::InitVulkan() {
 
     CreateSwapChain();
     CreateImageViews();
+
+    CreateSampler();
 
     CreateRenderPass();
     CreateGraphicsPipeline();
@@ -977,13 +978,13 @@ void HelloTriangleApplication::DrawImGui() {
     ImGui::Text("Frame Rate: %.1f FPS", ImGui::GetIO().Framerate);
     ImGui::Text("Swap Chain Image Count: %zu", m_SwapChainImages.size());
     ImGui::Text("Current Frame: %zu", m_CurrentFrame);
-    m_ImGuiImageRenderTarget->FlushAndWait();
     if (ImGui::Button("Recreate Swap Chain")) {
         RecreateSwapChain();
     }
     ImGui::ColorEdit3("Clear Color", (float *) &m_ImGuiImageRenderTarget->m_ClearColor.color.float32);
     ImGui::End();
-    m_ImGuiImageRenderTarget->RenderImGui();
+
+    RenderImGuiFrameBuffer();
 }
 
 void HelloTriangleApplication::CreateGraphicsPipeline() {
@@ -1232,6 +1233,8 @@ void HelloTriangleApplication::CreateFramebuffers() {
             m_Device.createFramebuffer(framebufferInfo).value()
         );
     }
+
+    m_ImageViewDependentRenderTargetsPerFrameBuffer.resize(m_SwapChainFramebuffers.size());
 }
 
 void HelloTriangleApplication::CreateCommandPool() {
@@ -1352,7 +1355,7 @@ void HelloTriangleApplication::BeginImGuiFrame() {
 }
 
 void HelloTriangleApplication::CreateImGuiRenderTarget() {
-    m_ImGuiImageRenderTarget = std::make_unique<ImGuiImageRenderTarget>(this);
+    m_ImGuiImageRenderTarget = std::make_shared<ImGuiImageRenderTarget>(this);
 }
 
 void HelloTriangleApplication::DrawFrame() {
@@ -1384,6 +1387,13 @@ void HelloTriangleApplication::DrawFrame() {
     }
 
     m_Device.resetFences(*m_InFlightFences[m_CurrentFrame]);
+
+    m_ImageViewDependentRenderTargetsPerFrameBuffer[imageIndex] = std::move(m_DependentRenderTargets);
+
+    for (auto &target: m_ImageViewDependentRenderTargetsPerFrameBuffer[imageIndex]) {
+        // it seems like we do not need to wait for the fense
+        target->Flush();
+    }
 
     m_CommandBuffers[m_CurrentFrame].reset();
     RecordCommandBuffer(m_CommandBuffers[m_CurrentFrame], imageIndex);
@@ -1442,6 +1452,23 @@ void HelloTriangleApplication::CleanupSwapChain() {
     m_SwapChainImages.clear();
 
     m_SwapChain.clear();
+}
+
+void HelloTriangleApplication::RenderImGuiFrameBuffer() {
+    ImTextureID id = reinterpret_cast<ImTextureID>(m_ImGuiImageRenderTarget->m_SetHandler);
+    auto [width, height] = m_ImGuiImageRenderTarget->m_RenderArea.extent;
+
+    m_DependentRenderTargets.push_back(m_ImGuiImageRenderTarget);
+
+    ImGui::Begin("ImGui Frame Buffer");
+    auto [currentWidth, currentHeight] = ImGui::GetContentRegionAvail();
+    ImGui::Image(id, ImVec2(static_cast<float>(width), static_cast<float>(height)));
+    ImGui::End();
+
+    if ((width != currentWidth || height != currentHeight) && (currentWidth > 0 && currentHeight > 0)) {
+        m_Device.waitIdle();
+        m_ImGuiImageRenderTarget = std::make_shared<ImGuiImageRenderTarget>(this, currentWidth, currentHeight);
+    }
 }
 
 void HelloTriangleApplication::PickPhysicalDevice() {
