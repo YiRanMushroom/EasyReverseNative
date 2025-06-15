@@ -1466,7 +1466,7 @@ void HelloTriangleApplication::RenderImGuiFrameBuffer() {
     ImGui::End();
 
     if ((width != currentWidth || height != currentHeight) && (currentWidth > 0 && currentHeight > 0)) {
-        m_Device.waitIdle();
+        // m_Device.waitIdle();
         m_ImGuiImageRenderTarget = std::make_shared<ImGuiImageRenderTarget>(this, currentWidth, currentHeight);
     }
 }
