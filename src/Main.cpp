@@ -4,6 +4,7 @@ import <vulkan/vk_platform.h>;
 import "vendor/glfwpp/native.h";
 import Util;
 import ImGui;
+import <cassert>;
 
 bool QueueFamilyIndices::IsComplete() const {
     return GraphicsFamily.has_value() && PresentFamily.has_value();
@@ -48,6 +49,7 @@ void HelloTriangleApplication::MainLoop() {
     while (!m_Window->shouldClose()) {
         glfw::pollEvents();
         DrawFrame();
+        // m_Device.waitIdle();
     }
 
     m_Device.waitIdle();
@@ -241,7 +243,7 @@ vk::SurfaceFormatKHR HelloTriangleApplication::ChooseSwapSurfaceFormat(
 
 vk::PresentModeKHR HelloTriangleApplication::ChooseSwapPresentMode(
     const std::vector<vk::PresentModeKHR> &availablePresentModes) const {
-    return vk::PresentModeKHR::eFifo; // FIFO is guaranteed to be supported
+    return vk::PresentModeKHR::eFifo;
 }
 
 vk::Extent2D HelloTriangleApplication::ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR &capabilities) const {
@@ -383,6 +385,17 @@ void HelloTriangleApplication::InitImGui() {
         *m_RenderPass,
         g_MinImageCount, g_ImageCount
     );
+}
+
+void HelloTriangleApplication::DrawImGui() {
+    static bool show_demo_window = true;
+    ImGui::ShowDemoWindow(&show_demo_window);
+
+    ImGui::Begin("Debug Window");
+    ImGui::Text("Frame Rate: %.1f FPS", ImGui::GetIO().Framerate);
+    ImGui::Text("Swap Chain Image Count: %zu", m_SwapChainImages.size());
+    ImGui::Text("Current Frame: %zu", m_CurrentFrame);
+    ImGui::End();
 }
 
 void HelloTriangleApplication::CreateGraphicsPipeline() {
@@ -553,6 +566,7 @@ vk::raii::ShaderModule HelloTriangleApplication::CreateShaderModule(const std::v
 }
 
 void HelloTriangleApplication::CreateRenderPass() {
+    // disable v-sync
     vk::AttachmentDescription colorAttachment{
         .flags = {},
         .format = m_SwapChainImageFormat,
@@ -654,7 +668,9 @@ void HelloTriangleApplication::CreateCommandBuffer() {
         .commandBufferCount = 1
     };
 
-    m_CommandBuffer = std::move(m_Device.allocateCommandBuffers(allocInfo).value().front());
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        m_CommandBuffers.push_back(std::move(m_Device.allocateCommandBuffers(allocInfo).value().front()));
+    }
 }
 
 void HelloTriangleApplication::CreateSyncObjects() {
@@ -662,15 +678,26 @@ void HelloTriangleApplication::CreateSyncObjects() {
         .pNext = nullptr,
         .flags = {}
     };
-    m_ImageAvailableSemaphore = m_Device.createSemaphore(semaphoreInfo).value();
-    m_RenderFinishedSemaphore = m_Device.createSemaphore(semaphoreInfo).value();
-
     vk::FenceCreateInfo fenceInfo{
         .pNext = nullptr,
         .flags = vk::FenceCreateFlagBits::eSignaled // Start with the fence signaled
     };
 
-    m_InFlightFence = m_Device.createFence(fenceInfo).value();
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        m_ImageAvailableSemaphores.push_back(m_Device.createSemaphore(semaphoreInfo).value());
+        m_InFlightFences.push_back(m_Device.createFence(fenceInfo).value());
+    }
+    // m_ImageAvailableSemaphore = m_Device.createSemaphore(semaphoreInfo).value();
+    // m_RenderFinishedSemaphore = m_Device.createSemaphore(semaphoreInfo).value();
+
+
+
+    // m_InFlightFence = m_Device.createFence(fenceInfo).value();
+    for (size_t i = 0; i < m_SwapChainImages.size(); i++) {
+        m_RenderFinishedSemaphores.push_back(m_Device.createSemaphore(semaphoreInfo).value());
+    }
+
+    // m_ImagesInFlight.resize(m_SwapChainImages.size(), nullptr);
 }
 
 void HelloTriangleApplication::RecordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex) {
@@ -734,42 +761,41 @@ void HelloTriangleApplication::RecordCommandBuffer(vk::CommandBuffer commandBuff
     }
 }
 
-void BeginImGuiFrame() {
+void HelloTriangleApplication::BeginImGuiFrame() {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    static bool show_demo_window = true;
-    if (show_demo_window) {
-        ImGui::ShowDemoWindow(&show_demo_window);
-    }
+    DrawImGui();
 }
 
 void HelloTriangleApplication::DrawFrame() {
     BeginImGuiFrame();
-
     ImGui::Render();
 
-    auto result = m_Device.waitForFences(*m_InFlightFence, vk::True, std::numeric_limits<uint64_t>::max());
-    if (result != vk::Result::eSuccess) {
-        throw std::runtime_error("Failed to wait for fence.");
+    auto waitForFenceResult = m_Device.waitForFences(*m_InFlightFences[m_CurrentFrame], vk::True,
+                          std::numeric_limits<uint64_t>::max());
+
+    if (waitForFenceResult != vk::Result::eSuccess) {
+        std::cerr << "Failed to wait for fence: " << vk::to_string(waitForFenceResult) << std::endl;
+        return;
     }
-    m_Device.resetFences(*m_InFlightFence);
 
     auto [resultAcquireImage, imageIndex] = m_SwapChain.acquireNextImage(
-        std::numeric_limits<uint64_t>::max(), m_ImageAvailableSemaphore, nullptr
+        std::numeric_limits<uint64_t>::max(), m_ImageAvailableSemaphores[m_CurrentFrame], nullptr
     );
 
-    m_CommandBuffer.reset();
-    RecordCommandBuffer(m_CommandBuffer, imageIndex);
+    m_Device.resetFences(*m_InFlightFences[m_CurrentFrame]);
+
+    m_CommandBuffers[m_CurrentFrame].reset();
+    RecordCommandBuffer(m_CommandBuffers[m_CurrentFrame], imageIndex);
 
     vk::PipelineStageFlags waitStages[] = {vk::PipelineStageFlagBits::eColorAttachmentOutput};
-    vk::Semaphore waitSemaphores[] = {*m_ImageAvailableSemaphore};
-    vk::Semaphore signalSemaphores[] = {*m_RenderFinishedSemaphore};
-    vk::CommandBuffer commandBuffers[] = {*m_CommandBuffer};
+    vk::Semaphore waitSemaphores[] = {*m_ImageAvailableSemaphores[m_CurrentFrame]};
+    vk::Semaphore signalSemaphores[] = {*m_RenderFinishedSemaphores[imageIndex]};
+    vk::CommandBuffer commandBuffers[] = {*m_CommandBuffers[m_CurrentFrame]};
 
     vk::SubmitInfo submitInfo{
-        .pNext = nullptr,
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = waitSemaphores,
         .pWaitDstStageMask = waitStages,
@@ -779,7 +805,7 @@ void HelloTriangleApplication::DrawFrame() {
         .pSignalSemaphores = signalSemaphores
     };
 
-    m_GraphicsQueue.submit(submitInfo, m_InFlightFence);
+    m_GraphicsQueue.submit(submitInfo, m_InFlightFences[m_CurrentFrame]);
 
     vk::SwapchainKHR swapChains[] = {*m_SwapChain};
     vk::PresentInfoKHR presentInfo{
@@ -787,19 +813,15 @@ void HelloTriangleApplication::DrawFrame() {
         .pWaitSemaphores = signalSemaphores,
         .swapchainCount = 1,
         .pSwapchains = swapChains,
-        .pImageIndices = &imageIndex,
-        .pResults = nullptr // Optional results
+        .pImageIndices = &imageIndex
     };
 
     vk::Result presentResult = m_PresentQueue.presentKHR(presentInfo);
-    if (presentResult != vk::Result::eSuccess && presentResult != vk::Result::eSuboptimalKHR) {
-        std::cerr << "Failed to present swap chain image: " << vk::to_string(presentResult) << std::endl;
-    }
+
+    m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 
     auto &io = ImGui::GetIO();
-
-    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-    {
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
         ImGui::UpdatePlatformWindows();
         ImGui::RenderPlatformWindowsDefault();
     }
