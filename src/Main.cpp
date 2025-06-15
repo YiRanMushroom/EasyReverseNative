@@ -83,14 +83,7 @@ void HelloTriangleApplication::InitializeWindow() {
         } else {
             m_ShouldUpdate = false;
         }
-
     });
-
-    // m_Window->mouseButtonEvent.setCallback([this](glfw::Window &window, glfw::MouseButton button, glfw::MouseButtonState state, glfw::ModifierKeyBit mods) {
-    //     if (button == glfw::MouseButton::Left) {
-    //         std::cout << "Left mouse button " << (state == glfw::MouseButtonState::Press ? "pressed" : "released") << std::endl;
-    //     }
-    // });
 }
 
 void HelloTriangleApplication::InitVulkan() {
