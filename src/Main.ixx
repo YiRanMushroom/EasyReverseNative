@@ -5,6 +5,7 @@ import vulkan_hpp;
 import glfwpp;
 import <glm/glm.hpp>;
 import <vulkan/vk_platform.h>;
+import ImGui;
 
 #ifdef NDEBUG
 constexpr bool enableValidationLayers = false;
@@ -30,12 +31,70 @@ struct SwapChainSupportDetails {
     std::vector<vk::PresentModeKHR> PresentModes;
 };
 
+class HelloTriangleApplication;
+
+class ImGuiImageRenderTarget {
+    friend class HelloTriangleApplication;
+public:
+    ImGuiImageRenderTarget(HelloTriangleApplication* app);
+
+public:
+    void Rebuild();
+
+    void Flush();
+    void FlushAndWait();
+
+    vk::Fence GetFence() const;
+
+    vk::ClearValue m_ClearColor{
+        vk::ClearColorValue(std::array<float, 4>{1.0f, 1.0f, 1.0f, 1.0f})
+    };
+
+    void RenderImGui();
+private:
+    void CreateImageAndView();
+    void CreateSampler();
+    void CreateRenderPass();
+    void CreateGraphicsPipeline();
+    void CreateFramebuffer();
+    void CreateSyncObjects();
+    void CreateCommandBuffer();
+    void CreateDescriptorSetLayout();
+    uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
+    void RecordCommandBuffer();
+
+    HelloTriangleApplication* m_App{nullptr};
+
+    vk::raii::Image m_Image{nullptr};
+    vk::raii::DeviceMemory m_ImageMemory{nullptr};
+    vk::raii::ImageView m_ImageView{nullptr};
+    vk::raii::Pipeline m_GraphicsPipeline{nullptr};
+    vk::raii::PipelineLayout m_PipelineLayout{nullptr};
+    vk::raii::RenderPass m_RenderPass{nullptr};
+    vk::raii::Framebuffer m_Framebuffer{nullptr};
+    vk::raii::Fence m_RenderFinishedFence{nullptr};
+    vk::raii::CommandBuffer m_CommandBuffer{nullptr};
+
+    vk::raii::Sampler m_Sampler{nullptr};
+
+    vk::DescriptorSet m_ImageDescriptorSet{nullptr};
+    VkDescriptorSet m_SetHandler;
+
+    vk::Rect2D m_RenderArea{
+        .offset = vk::Offset2D{0, 0},
+        .extent = vk::Extent2D{960, 640} // Set your desired width and height
+    };
+
+    bool m_NeedsRebuild = false;
+};
 
 class HelloTriangleApplication {
 public:
     HelloTriangleApplication();
     void MainLoop();
     void Cleanup();
+
+    friend class ImGuiImageRenderTarget;
 
 private:
     void InitializeWindow();
@@ -61,6 +120,7 @@ private:
     void InitImGui();
     void DrawImGui();
     void BeginImGuiFrame();
+    void CreateImGuiRenderTarget();
 
     // Graphics
     void CreateGraphicsPipeline();
@@ -88,6 +148,7 @@ private:
     vk::raii::Queue m_GraphicsQueue{nullptr};
     vk::raii::Queue m_PresentQueue{nullptr};
     vk::raii::SwapchainKHR m_SwapChain{nullptr};
+
     std::vector<vk::Image> m_SwapChainImages;
     vk::Format m_SwapChainImageFormat;
     vk::Extent2D m_SwapChainExtent;
@@ -109,10 +170,10 @@ private:
     std::vector<vk::raii::Fence> m_InFlightFences;
     // std::vector<vk::Fence> m_ImagesInFlight;
     size_t m_CurrentFrame = 0;
-
     std::vector<vk::raii::CommandBuffer> m_CommandBuffers;
-
     bool m_ShouldUpdate = true;
+
+    std::unique_ptr<ImGuiImageRenderTarget> m_ImGuiImageRenderTarget;
 
 private:
     const inline static std::vector<const char*> s_ValidationLayers = {
