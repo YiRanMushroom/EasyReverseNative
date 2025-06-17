@@ -1,8 +1,6 @@
 export module ImGui;
 
-export import "imgui.h";
-export import "backends/imgui_impl_glfw.h";
-export import "backends/imgui_impl_vulkan.h";
+export import "vendor/ImGuiHeader.h";
 import "vulkan/vulkan.hpp";
 
 vk::DescriptorPool g_ImDescriptorPool{nullptr};

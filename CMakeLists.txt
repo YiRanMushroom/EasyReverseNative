@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 4.0)
-project(vulkan_study)
+project(EasyReverseNative)
 
-set(PROJECT_NAME vulkan_study)
+set(PROJECT_NAME EasyReverseNative)
 
 set(CMAKE_CXX_STANDARD 23)
 
@@ -29,6 +29,12 @@ set(IMGUI_BACKEND_PLATFORM "glfw" CACHE STRING "ImGui backend platform")
 add_subdirectory(vendor/imgui)
 target_link_libraries(${PROJECT_NAME} imgui)
 
+# MSVC UTF8
+target_compile_options(${PROJECT_NAME}
+        PRIVATE
+        $<$<CXX_COMPILER_ID:MSVC>:/utf-8>
+)
+
 target_compile_definitions(${PROJECT_NAME} PRIVATE
         "VULKAN_HPP_NO_STRUCT_CONSTRUCTORS=1"
         "GLFW_EXPOSE_NATIVE_WIN32=1"
@@ -41,7 +47,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 
 # Copy all files with .spv in shaders to the build directory
 file(GLOB_RECURSE SHADER_FILES "shaders/*.spv")
-foreach(SHADER_FILE ${SHADER_FILES})
+foreach (SHADER_FILE ${SHADER_FILES})
     get_filename_component(SHADER_NAME ${SHADER_FILE} NAME)
     add_custom_command(
             TARGET ${PROJECT_NAME} POST_BUILD
@@ -49,4 +55,4 @@ foreach(SHADER_FILE ${SHADER_FILES})
             "${SHADER_FILE}"
             "$<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders/${SHADER_NAME}"
     )
-endforeach()
+endforeach ()
