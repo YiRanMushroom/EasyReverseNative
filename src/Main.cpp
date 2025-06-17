@@ -23,8 +23,8 @@ int main() {
     auto basicContext = CreateBasicContext(
         WindowSpec{
             .title = "Easy Reverse Native",
-            .width = 1920,
-            .height = 1080
+            .width = 1280,
+            .height = 480
         }
     );
 

@@ -89,11 +89,16 @@ public:
         if (ImGui::Button("Hello")) {
             std::cout << "Hello, App!" << std::endl;
         }
+        ImGui::End();
 
+        // ImVec2 min_size(1500, 0); // Width 600, height unconstrained (0)
+        // ImVec2 max_size(FLT_MAX, FLT_MAX); // No maximum constraint
+        // ImGui::SetNextWindowSizeConstraints(min_size, max_size);
+        ImGui::Begin("Easy Reverse Native");
         // Button to get the handle of the game process
         {
             ImGui::Text("Game Name: ");
-            ImGui::SameLine();
+            ImGui::SameLine(300);
             // size_t availableWidth = ImGui::GetContentRegionAvail().x;
             // ImGui::SetNextItemWidth(
             //     availableWidth - ImGui::GetStyle().ItemSpacing.x - ImGui::CalcTextSize("Get Handle").x - 10);
@@ -112,7 +117,7 @@ public:
         // Address
         {
             ImGui::Text("Address: ");
-            ImGui::SameLine();
+            ImGui::SameLine(300);
             // size_t availableWidth = ImGui::GetContentRegionAvail().x;
             // ImGui::SetNextItemWidth(
             //     availableWidth - ImGui::GetStyle().ItemSpacing.x);
@@ -126,7 +131,7 @@ public:
         // DataType
         {
             ImGui::Text("Data Type: ");
-            ImGui::SameLine();
+            ImGui::SameLine(300);
             ImGui::Combo("##Data Type", &dataType.GetProxy().Get(),
                          "Int\0Float\0Double\0Pointer\0", 4); // 4 is the number of items
         }
@@ -134,7 +139,7 @@ public:
         // Value
         {
             ImGui::Text("Value: ");
-            ImGui::SameLine();
+            ImGui::SameLine(300);
             // size_t availableWidth = ImGui::GetContentRegionAvail().x;
             // ImGui::SetNextItemWidth(
             //     availableWidth - ImGui::GetStyle().ItemSpacing.x);
@@ -144,6 +149,7 @@ public:
                 ImGui::InputText("##Value", &valueProxy.Get());
             }
         } {
+            ImGui::SetCursorPosX(300);
             if (ImGui::Button("Read Value")) {
                 OnReadClicked();
             }

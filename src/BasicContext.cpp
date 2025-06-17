@@ -15,7 +15,7 @@ void BasicContextImpl::InitializeWindow(const WindowSpec &windowSpec) {
         .clientApi = glfw::ClientApi::None,
     }.apply();
 
-    m_Window = glfw::Window{1920, 1080, "Vulkan", nullptr, nullptr};
+    m_Window = glfw::Window{windowSpec.width, windowSpec.height, windowSpec.title.c_str()};
 
     /*
         glfwSetWindowSizeCallback(m_Window, [](GLFWwindow *window, int width, int height) {
