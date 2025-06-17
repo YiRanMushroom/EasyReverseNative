@@ -12,12 +12,9 @@
 #include "version.h"
 #include "window.h"
 
-namespace glfw
-{
-    namespace impl
-    {
-        inline void errorCallback(int errorCode_, const char* what_)
-        {
+namespace glfw {
+    namespace impl {
+        inline void errorCallback(int errorCode_, const char *what_) {
             // Error handling philosophy as per http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p0709r4.pdf (section 1.1)
 
             // Application programmer errors. See the GLFW docs and fix the code.
@@ -33,13 +30,11 @@ namespace glfw
             assert(errorCode_ != GLFW_INVALID_ENUM);
 
             // Allocation failure must be treated separately
-            if(errorCode_ == GLFW_OUT_OF_MEMORY)
-            {
+            if (errorCode_ == GLFW_OUT_OF_MEMORY) {
                 throw std::bad_alloc();
             }
 
-            switch(errorCode_)
-            {
+            switch (errorCode_) {
                 case GLFW_API_UNAVAILABLE:
                     throw APIUnavailableError(what_);
                 case GLFW_VERSION_UNAVAILABLE:
@@ -54,158 +49,162 @@ namespace glfw
             }
         }
 
-        inline void monitorCallback(GLFWmonitor* monitor_, int eventType_)
-        {
+        inline void monitorCallback(GLFWmonitor *monitor_, int eventType_) {
             monitorEvent(Monitor{monitor_}, MonitorEventType{eventType_});
         }
 
-        inline void joystickCallback(int jid_, int eventType_)
-        {
-            joystickEvent(Joystick{static_cast<decltype(Joystick::Joystick1)>(jid_)}, static_cast<JoystickEvent>(eventType_));
+        inline void joystickCallback(int jid_, int eventType_) {
+            joystickEvent(Joystick{static_cast<decltype(Joystick::Joystick1)>(jid_)},
+                          static_cast<JoystickEvent>(eventType_));
         }
-    }  // namespace impl
+    } // namespace impl
 
 #if GLFW_VERSION_MAJOR >= 3 && GLFW_VERSION_MINOR >= 3
-    struct InitHints
-    {
+    struct InitHints {
         bool cocoaChdirResources = true;
         bool cocoaMenubar = true;
 
-        void apply() const
-        {
+        void apply() const {
             glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, cocoaChdirResources);
             glfwInitHint(GLFW_COCOA_MENUBAR, cocoaMenubar);
         }
     };
 #endif
 
-    struct GlfwLibrary
-    {
+    struct GlfwLibrary {
     private:
         GlfwLibrary() = default;
+        GlfwLibrary(bool holdContext) : m_HoldContext(holdContext) {
 
-    public:
-        ~GlfwLibrary()
-        {
-            glfwTerminate();
         }
 
-        [[nodiscard]] friend GlfwLibrary init()
-        {
+        bool m_HoldContext = false;
+
+    public:
+        GlfwLibrary(const GlfwLibrary &) = delete;
+
+        GlfwLibrary &operator=(const GlfwLibrary &) = delete;
+
+        GlfwLibrary(GlfwLibrary &&other) noexcept
+            : m_HoldContext(other.m_HoldContext) {
+            other.m_HoldContext = false;
+        }
+
+        GlfwLibrary &operator=(GlfwLibrary &&other) noexcept {
+            if (this != &other) {
+                m_HoldContext = other.m_HoldContext;
+                other.m_HoldContext = false;
+            }
+            return *this;
+        }
+
+        ~GlfwLibrary() {
+            if (m_HoldContext) {
+                glfwTerminate();
+            }
+        }
+
+        [[nodiscard]] friend GlfwLibrary init() {
             glfwSetErrorCallback(impl::errorCallback);
 
 #if GLFW_VERSION_MAJOR >= 3 && GLFW_VERSION_MINOR >= 3
-            glfwInitHint(GLFW_JOYSTICK_HAT_BUTTONS, false);  // disable deprecated behavior
+            glfwInitHint(GLFW_JOYSTICK_HAT_BUTTONS, false); // disable deprecated behavior
 #endif
-            if(!glfwInit())
-            {
+            if (!glfwInit()) {
                 throw glfw::Error("Could not initialize GLFW");
             }
 
             glfwSetMonitorCallback(impl::monitorCallback);
             glfwSetJoystickCallback(impl::joystickCallback);
 
-            return {};
+            return {true};
         }
     };
 
     [[nodiscard]] inline GlfwLibrary init();
 
 #if GLFW_VERSION_MAJOR >= 3 && GLFW_VERSION_MINOR >= 3
-    [[nodiscard]] inline bool rawMouseMotionSupported()
-    {
+    [[nodiscard]] inline bool rawMouseMotionSupported() {
         return glfwRawMouseMotionSupported();
     }
 #endif
 
-    inline void setClipboardString(const char* content_)
-    {
+    inline void setClipboardString(const char *content_) {
         glfwSetClipboardString(nullptr, content_);
     }
 
-    [[nodiscard]] inline const char* getClipboardString()
-    {
+    [[nodiscard]] inline const char *getClipboardString() {
         return glfwGetClipboardString(nullptr);
     }
 
-    [[nodiscard]] inline bool extensionSupported(const char* extensionName_)
-    {
+    [[nodiscard]] inline bool extensionSupported(const char *extensionName_) {
         return glfwExtensionSupported(extensionName_);
     }
 
     using GlProc = GLFWglproc;
-    [[nodiscard]] inline GlProc getProcAddress(const char* procName_)
-    {
+
+    [[nodiscard]] inline GlProc getProcAddress(const char *procName_) {
         return glfwGetProcAddress(procName_);
     }
 
-    [[nodiscard]] inline bool vulkanSupported()
-    {
+    [[nodiscard]] inline bool vulkanSupported() {
         return glfwVulkanSupported();
     }
 
-    [[nodiscard]] inline std::vector<const char*> getRequiredInstanceExtensions()
-    {
+    [[nodiscard]] inline std::vector<const char *> getRequiredInstanceExtensions() {
         unsigned count;
         auto pExtensionNames = glfwGetRequiredInstanceExtensions(&count);
 
-        std::vector<const char*> extensionNames;
+        std::vector<const char *> extensionNames;
         extensionNames.reserve(count);
-        for(int i = 0; i < count; ++i)
-        {
+        for (int i = 0; i < count; ++i) {
             extensionNames.push_back(pExtensionNames[i]);
         }
         return extensionNames;
     }
+
     using VkProc = GLFWvkproc;
 #if defined(VK_VERSION_1_0)
-    [[nodiscard]] inline VkProc getInstanceProcAddress(VkInstance instance, const char* procName)
-    {
+    [[nodiscard]] inline VkProc getInstanceProcAddress(VkInstance instance, const char *procName) {
         return glfwGetInstanceProcAddress(instance, procName);
     }
 
     [[nodiscard]] inline bool getPhysicalDevicePresentationSupport(
-            VkInstance instance,
-            VkPhysicalDevice device,
-            uint32_t queueFamily)
-    {
+        VkInstance instance,
+        VkPhysicalDevice device,
+        uint32_t queueFamily) {
         return glfwGetPhysicalDevicePresentationSupport(instance, device, queueFamily);
     }
 #endif  // VK_VERSION_1_0
 
 #ifdef VULKAN_HPP
-    [[nodiscard]] inline VkProc getInstanceProcAddress(const vk::Instance& instance, const char* procName)
-    {
+    [[nodiscard]] inline VkProc getInstanceProcAddress(const vk::Instance &instance, const char *procName) {
         return getInstanceProcAddress(static_cast<VkInstance>(instance), procName);
     }
     [[nodiscard]] inline bool getPhysicalDevicePresentationSupport(
-            const vk::Instance& instance,
-            const vk::PhysicalDevice& device,
-            uint32_t queueFamily)
-    {
-        return getPhysicalDevicePresentationSupport(static_cast<VkInstance>(instance), static_cast<VkPhysicalDevice>(device), queueFamily);
+        const vk::Instance &instance,
+        const vk::PhysicalDevice &device,
+        uint32_t queueFamily) {
+        return getPhysicalDevicePresentationSupport(static_cast<VkInstance>(instance),
+                                                    static_cast<VkPhysicalDevice>(device), queueFamily);
     }
 #endif  // VULKAN_HPP
 
-    [[nodiscard]] inline double getTime()
-    {
+    [[nodiscard]] inline double getTime() {
         return glfwGetTime();
     }
 
-    inline void setTime(double time_)
-    {
+    inline void setTime(double time_) {
         glfwSetTime(time_);
     }
 
-    [[nodiscard]] inline uint64_t getTimerValue()
-    {
+    [[nodiscard]] inline uint64_t getTimerValue() {
         return glfwGetTimerValue();
     }
 
-    [[nodiscard]] inline uint64_t getTimerFrequency()
-    {
+    [[nodiscard]] inline uint64_t getTimerFrequency() {
         return glfwGetTimerFrequency();
     }
-}  // namespace glfw
+} // namespace glfw
 
 #endif  // GLFWPP_GLFWPP_H

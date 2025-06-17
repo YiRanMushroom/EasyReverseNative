@@ -7,41 +7,19 @@ import <glm/glm.hpp>;
 import <vulkan/vk_platform.h>;
 import ImGui;
 
-#ifdef NDEBUG
-constexpr bool enableValidationLayers = false;
-#else
-constexpr bool enableValidationLayers = true;
-#endif
+import BasicContext;
+import Event.AllEvents;
 
-vk::raii::Context g_VkRaiiContext{};
-vk::raii::Instance g_VkInstance{nullptr};
-constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
-
-
-struct QueueFamilyIndices {
-    std::optional<uint32_t> GraphicsFamily;
-    std::optional<uint32_t> PresentFamily;
-
-    [[nodiscard]] bool IsComplete() const;
-};
-
-struct SwapChainSupportDetails {
-    vk::SurfaceCapabilitiesKHR Capabilities;
-    std::vector<vk::SurfaceFormatKHR> Formats;
-    std::vector<vk::PresentModeKHR> PresentModes;
-};
-
-class HelloTriangleApplication;
 
 class ImGuiImageRenderTarget {
-    friend class HelloTriangleApplication;
 public:
-    ImGuiImageRenderTarget(HelloTriangleApplication* app, uint32_t width = 960, uint32_t height = 640);
+    ImGuiImageRenderTarget(IBasicContext *context, uint32_t width = 960, uint32_t height = 640);
 
 public:
     void Rebuild();
 
     void Flush();
+
     void FlushAndWait();
 
     vk::Fence GetFence() const;
@@ -56,16 +34,24 @@ private:
     void CreateImageAndView();
 
     void CreateRenderPass();
+
     void CreateGraphicsPipeline();
+
     void CreateFramebuffer();
+
     void CreateSyncObjects();
+
     void CreateCommandBuffer();
+
     void CreateDescriptorSetLayout();
+
     uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
+
     void RecordCommandBuffer();
 
-    HelloTriangleApplication* m_App{nullptr};
+    IBasicContext *m_Ctx{nullptr};
 
+public:
     vk::raii::Image m_Image{nullptr};
     vk::raii::DeviceMemory m_ImageMemory{nullptr};
     vk::raii::ImageView m_ImageView{nullptr};
@@ -75,7 +61,6 @@ private:
     vk::raii::Framebuffer m_Framebuffer{nullptr};
     vk::raii::Fence m_RenderFinishedFence{nullptr};
     vk::raii::CommandBuffer m_CommandBuffer{nullptr};
-
 
     vk::DescriptorSet m_ImageDescriptorSet{nullptr};
     VkDescriptorSet m_SetHandler;
@@ -88,113 +73,141 @@ private:
     bool m_NeedsRebuild = false;
 };
 
-class HelloTriangleApplication {
+IBasicContext *g_BasicContext = nullptr;
+
+class AppUiLayer : public IUpdatableLayer {
 public:
-    HelloTriangleApplication();
-    void MainLoop();
-    void Cleanup();
+    AppUiLayer() {
+        m_RenderTarget = std::make_shared<ImGuiImageRenderTarget>(g_BasicContext, 960, 640);
+    }
 
-    friend class ImGuiImageRenderTarget;
+    void OnUpdate() override {
+        ImGui::Begin("Application UI");
+        ImGui::Text("Hello, Triangle!");
+        if (ImGui::Button("Rebuild Swap Chain")) {
+            g_BasicContext->RecreateSwapChain();
+        }
 
-private:
-    void InitializeWindow();
-    void InitVulkan();
-    void CreateInstance();
-    static bool CheckValidationLayerSupport();
-    void SetupDebugMessenger();
-    static std::vector<const char*> GetRequiredExtensions();
-    static vk::DebugUtilsMessengerCreateInfoEXT PopulateDebugMessengerCreateInfo();
-    void PickPhysicalDevice();
-    void CreateLogicalDevice();
-    void CreateSurface();
-    QueueFamilyIndices FindQueueFamilies(vk::PhysicalDevice physicalDevice);
-    bool IsDeviceSuitable(const vk::raii::PhysicalDevice &device);
-    [[nodiscard]] bool CheckDeviceExtensionSupport(vk::PhysicalDevice device) const;
-    SwapChainSupportDetails QuerySwapChainSupport(vk::PhysicalDevice device);
-    [[nodiscard]] vk::SurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) const;
-    [[nodiscard]] vk::PresentModeKHR ChooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) const;
-    [[nodiscard]] vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) const;
-    void CreateSwapChain();
-    void CreateImageViews();
+        ImGui::End();
 
-    void CreateSampler();
+        m_RenderTarget->Flush();
 
-    void InitImGui();
-    void DrawImGui();
-    void BeginImGuiFrame();
-    void CreateImGuiRenderTarget();
+        ImTextureID id = reinterpret_cast<ImTextureID>(m_RenderTarget->m_SetHandler);
+        auto [width, height] = m_RenderTarget->m_RenderArea.extent;
 
-    // Graphics
-    void CreateGraphicsPipeline();
-    vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code);
-    void CreateRenderPass();
-    void CreateFramebuffers();
 
-    // Commands
-    void CreateCommandPool();
-    void CreateCommandBuffer();
-    void CreateSyncObjects();
-    void RecordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
+        ImGui::Begin("ImGui Frame Buffer");
+        auto [currentWidth, currentHeight] = ImGui::GetContentRegionAvail();
+        ImGui::Image(id, ImVec2(static_cast<float>(width), static_cast<float>(height)));
+        ImGui::End();
 
-    void DrawFrame();
+        if ((width != currentWidth || height != currentHeight) && (currentWidth > 0 && currentHeight > 0)) {
+            m_RenderTarget = std::make_shared<ImGuiImageRenderTarget>(g_BasicContext, currentWidth, currentHeight);
+        }
+    }
 
-    // Swap chain recreation
-    void RecreateSwapChain();
-    void CleanupSwapChain();
-    void RenderImGuiFrameBuffer();
+    void OnSubmitCommandBuffer(vk::CommandBuffer commandBuffer, std::vector<std::any> &dependentContexts) override {
+        dependentContexts.push_back(m_RenderTarget);
+    }
 
-    std::optional<glfw::Window> m_Window;
-    vk::raii::SurfaceKHR m_Surface{nullptr};
-    vk::raii::DebugUtilsMessengerEXT m_DebugMessenger{nullptr};
-    vk::raii::PhysicalDevice m_PhysicalDevice{nullptr};
-    vk::raii::Device m_Device{nullptr};
-    vk::raii::Queue m_GraphicsQueue{nullptr};
-    vk::raii::Queue m_PresentQueue{nullptr};
-    vk::raii::SwapchainKHR m_SwapChain{nullptr};
-
-    vk::raii::Sampler m_Sampler{nullptr};
-
-    std::vector<vk::Image> m_SwapChainImages;
-    vk::Format m_SwapChainImageFormat;
-    vk::Extent2D m_SwapChainExtent;
-    std::vector<vk::raii::ImageView> m_SwapChainImageViews;
-
-    vk::raii::RenderPass m_RenderPass{nullptr};
-    vk::raii::Pipeline m_GraphicsPipeline{nullptr};
-    vk::raii::PipelineLayout m_PipelineLayout{nullptr};
-    std::vector<vk::raii::Framebuffer> m_SwapChainFramebuffers;
-
-    vk::raii::CommandPool m_CommandPool{nullptr};
-    std::vector<std::shared_ptr<ImGuiImageRenderTarget>> m_DependentRenderTargets;
-    std::vector<std::vector<std::shared_ptr<ImGuiImageRenderTarget>>> m_ImageViewDependentRenderTargetsPerFrameBuffer;
-
-    std::vector<vk::raii::Semaphore> m_ImageAvailableSemaphores;
-    std::vector<vk::raii::Semaphore> m_RenderFinishedSemaphores;
-    std::vector<vk::raii::Fence> m_InFlightFences;
-    size_t m_CurrentFrame = 0;
-    std::vector<vk::raii::CommandBuffer> m_CommandBuffers;
-    bool m_ShouldUpdate = true;
-
-    std::shared_ptr<ImGuiImageRenderTarget> m_ImGuiImageRenderTarget;
+    bool OnEvent(const Event *event) override {
+        if (event->GetEventType() == EventType::KeyTyped) {
+            std::cout << event->ToString() << std::endl;
+        }
+        return true;
+    }
 
 private:
-    const inline static std::vector<const char*> s_ValidationLayers = {
-        "VK_LAYER_KHRONOS_validation"
-    };
-
-    const inline static std::vector<const char*> s_DeviceExtensions = {
-        vk::KHRSwapchainExtensionName
-    };
-
+    std::shared_ptr<ImGuiImageRenderTarget> m_RenderTarget;
 };
 
+export template<typename F>
+void RenderBackgroundSpace(const F &renderMenuBar) {
+    // We are using the ImGuiWindowFlags_NoDocking flag to make the parent window not dockable into,
+    // because it would be confusing to have two docking targets within each others.
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+
+    const ImGuiViewport *viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    ImGui::SetNextWindowViewport(viewport->ID);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse
+            | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+    window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+
+
+    // When using ImGuiDockNodeFlags_PassthruCentralNode, DockSpace() will render our background
+    // and handle the pass-thru hole, so we ask Begin() to not render a background.
+    // if (dockspace_flags & ImGuiDockNodeFlags_PassthruCentralNode)
+    //     window_flags |= ImGuiWindowFlags_NoBackground;
+
+    // Important: note that we proceed even if Begin() returns false (aka window is collapsed).
+    // This is because we want to keep our DockSpace() active. If a DockSpace() is inactive,
+    // all active windows docked into it will lose their parent and become undocked.
+    // We cannot preserve the docking relationship between an active window and an inactive docking, otherwise
+    // any change of dockspace/settings would lead to windows being stuck in limbo and never being visible.
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::Begin("DockSpace", nullptr, window_flags);
+
+    ImGui::PopStyleVar();
+
+    ImGui::PopStyleVar(2);
+
+    // Submit the DockSpace
+    ImGuiIO &io = ImGui::GetIO();
+    if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable) {
+        ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+    }
+
+    if (ImGui::BeginMenuBar()) {
+        renderMenuBar();
+        ImGui::EndMenuBar();
+    }
+
+    ImGui::End();
+}
+
+class BackGroundLayer : public IUpdatableLayer {
+public:
+    void OnUpdate() override {
+        RenderBackgroundSpace([]{});
+    }
+
+    void OnSubmitCommandBuffer(vk::CommandBuffer commandBuffer, std::vector<std::any> &dependentContexts) override {
+        // No specific command buffer submission for this layer
+    }
+
+    bool OnEvent(const Event *event) override {
+        // Handle events if necessary
+        return false;
+    }
+};
 
 export int main() {
-    auto glfwLib = glfw::init();
+    auto basicContext = CreateBasicContext(
+        WindowSpec{
+            .title = "Hello Triangle",
+            .width = 1920,
+            .height = 1080
+        }
+    );
 
-    HelloTriangleApplication app{};
-    app.MainLoop();
-    app.Cleanup();
+    g_BasicContext = basicContext.get();
+
+    basicContext->EmplaceLayer<BackGroundLayer>();
+
+    auto uiLayer = basicContext->EmplaceLayer<AppUiLayer>();
+    basicContext->SetClearColor(vk::ClearColorValue(std::array<float, 4>{0.2f, 0.2f, 0.2f, 1.0f}));
+
+    basicContext->MainLoop();
+
+    basicContext->PopLayer(std::move(uiLayer));
+
+    basicContext->Cleanup();
 
     return 0;
 }
