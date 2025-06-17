@@ -56,3 +56,11 @@ foreach (SHADER_FILE ${SHADER_FILES})
             "$<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders/${SHADER_NAME}"
     )
 endforeach ()
+
+# copy assets directory to the build directory, do not copy every file respectively, copy the whole directory
+add_custom_command(
+        TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/assets"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/assets"
+)
