@@ -78,6 +78,10 @@ void *StringToAddress(const std::string &addressString) {
 
 export class AppUiLayer : public IUpdatableLayer {
 public:
+    AppUiLayer() : m_WindowTitle{"Easy Reverse Native###id_easy_reverse"} {
+
+    }
+
     void OnUpdate() override {
         ImGui::ShowDemoWindow();
 
@@ -278,7 +282,7 @@ public:
     Atomic<std::string> m_Value;
 
     // same id different title, use ## to map to same id
-    Atomic<std::string> m_WindowTitle = "Easy Reverse Native###id_easy_reverse";
+    Atomic<std::string> m_WindowTitle;
 
     // global variables
     // Atomic<HWND> gameWindowHandle = nullptr;
