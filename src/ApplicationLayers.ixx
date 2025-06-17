@@ -94,7 +94,7 @@ public:
         // ImVec2 min_size(1500, 0); // Width 600, height unconstrained (0)
         // ImVec2 max_size(FLT_MAX, FLT_MAX); // No maximum constraint
         // ImGui::SetNextWindowSizeConstraints(min_size, max_size);
-        ImGui::Begin("Easy Reverse Native");
+        ImGui::Begin(m_WindowTitle.GetProxy().Get().c_str());
         // Button to get the handle of the game process
         {
             ImGui::Text("Game Name: ");
@@ -196,6 +196,7 @@ public:
         if (target == nullptr) {
             // QWidget::setWindowTitle("Easy Reverse : Error"); // NOLINT
             g_BasicContext->GetWindow().setTitle("Easy Reverse Native : Error");
+            m_WindowTitle = "Easy Reverse Native : Error###id_easy_reverse";
             MessageBoxW(myHandle, L"Error! Could not find the process handle!", L"Error", MB_OK | MB_ICONERROR);
             return;
         }
@@ -221,6 +222,7 @@ public:
         // QString updateName = QString::fromStdString(resultTarget);
         // QWidget::setWindowTitle("Selected: "+ updateName); // NOLINT
         g_BasicContext->GetWindow().setTitle(("Selected: " + std::string(resultTarget)).c_str());
+        m_WindowTitle = ("Selected: " + std::string(resultTarget) + "###id_easy_reverse");
         // store all necessary things in global varibles:
         // gameWindowHandle = target;
         gameProcessID = processID;
@@ -274,6 +276,9 @@ public:
 
     Atomic<std::string> m_Address;
     Atomic<std::string> m_Value;
+
+    // same id different title, use ## to map to same id
+    Atomic<std::string> m_WindowTitle = "Easy Reverse Native###id_easy_reverse";
 
     // global variables
     // Atomic<HWND> gameWindowHandle = nullptr;
