@@ -151,7 +151,9 @@ public:
         } {
             ImGui::SetCursorPosX(300);
             if (ImGui::Button("Read Value")) {
-                OnReadClicked();
+                std::thread([this] {
+                    OnReadClicked();
+                }).detach();
             }
             ImGui::SameLine();
             ImGui::Button("Write Value");
