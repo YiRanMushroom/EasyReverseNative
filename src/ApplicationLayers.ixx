@@ -64,9 +64,23 @@ std::string exec(const std::wstring &command) { // get the powershell command as
     return output_string;
 }
 
+void *StringToAddress(const std::string &addressString) {
+    uintptr_t address = 0;
+
+    try {
+        address = std::stoull(addressString, nullptr, 16); // base 16 for hex
+    } catch (...) {
+        return nullptr;
+    }
+
+    return reinterpret_cast<void *>(address);
+}
+
 export class AppUiLayer : public IUpdatableLayer {
 public:
     void OnUpdate() override {
+        ImGui::ShowDemoWindow();
+
         ImGui::Begin("Application UI");
         ImGui::Text("AppLayer");
         if (ImGui::Button("Rebuild Swap Chain")) {
@@ -80,9 +94,9 @@ public:
         {
             ImGui::Text("Game Name: ");
             ImGui::SameLine();
-            size_t availableWidth = ImGui::GetContentRegionAvail().x;
-            ImGui::SetNextItemWidth(availableWidth - ImGui::GetStyle().ItemSpacing.x - ImGui::CalcTextSize("Get Handle").x - 10);
-
+            // size_t availableWidth = ImGui::GetContentRegionAvail().x;
+            // ImGui::SetNextItemWidth(
+            //     availableWidth - ImGui::GetStyle().ItemSpacing.x - ImGui::CalcTextSize("Get Handle").x - 10);
             {
                 auto gameNameProxy = m_GameName.GetProxy();
                 ImGui::InputText("##GameName", &gameNameProxy.Get());
@@ -95,6 +109,47 @@ public:
             }
         }
 
+        // Address
+        {
+            ImGui::Text("Address: ");
+            ImGui::SameLine();
+            // size_t availableWidth = ImGui::GetContentRegionAvail().x;
+            // ImGui::SetNextItemWidth(
+            //     availableWidth - ImGui::GetStyle().ItemSpacing.x);
+            // Input text for address
+            {
+                auto addressProxy = m_Address.GetProxy();
+                ImGui::InputText("##Address", &addressProxy.Get());
+            }
+        }
+
+        // DataType
+        {
+            ImGui::Text("Data Type: ");
+            ImGui::SameLine();
+            ImGui::Combo("##Data Type", &dataType.GetProxy().Get(),
+                         "Int\0Float\0Double\0Pointer\0", 4); // 4 is the number of items
+        }
+
+        // Value
+        {
+            ImGui::Text("Value: ");
+            ImGui::SameLine();
+            // size_t availableWidth = ImGui::GetContentRegionAvail().x;
+            // ImGui::SetNextItemWidth(
+            //     availableWidth - ImGui::GetStyle().ItemSpacing.x);
+            // Input text for value
+            {
+                auto valueProxy = m_Value.GetProxy();
+                ImGui::InputText("##Value", &valueProxy.Get());
+            }
+        } {
+            if (ImGui::Button("Read Value")) {
+                OnReadClicked();
+            }
+            ImGui::SameLine();
+            ImGui::Button("Write Value");
+        }
 
         ImGui::End();
     }
@@ -110,8 +165,7 @@ public:
         const auto myHandle = glfw::native::getWin32Window(g_BasicContext->GetWindow()); // HWND for handle
         // we are running in cmd condition, so we call powershell and use command to find the process and return the window name
         // get the name string first
-        std::wstring gameName;
-        {
+        std::wstring gameName; {
             auto proxy = m_GameName.GetProxy();
             gameName = std::wstring(proxy->begin(), proxy->end());
         }
@@ -133,6 +187,7 @@ public:
         HWND target = FindWindowA(NULL, gameProcess); // NOLINT
         if (target == nullptr) {
             // QWidget::setWindowTitle("Easy Reverse : Error"); // NOLINT
+            g_BasicContext->GetWindow().setTitle("Easy Reverse Native : Error");
             MessageBoxW(myHandle, L"Error! Could not find the process handle!", L"Error", MB_OK | MB_ICONERROR);
             return;
         }
@@ -157,19 +212,67 @@ public:
         // if we can reach here, it means we get the correct process, update window for info
         // QString updateName = QString::fromStdString(resultTarget);
         // QWidget::setWindowTitle("Selected: "+ updateName); // NOLINT
+        g_BasicContext->GetWindow().setTitle(("Selected: " + std::string(resultTarget)).c_str());
         // store all necessary things in global varibles:
-        gameWindowHandle = target;
+        // gameWindowHandle = target;
         gameProcessID = processID;
         gameHandle = gameKernelProcess;
+    }
+
+    void OnReadClicked() {
+        // first check handle state:
+        if (gameProcessID.GetProxy().Get() == 0) {
+            return; // doing nothing since we did not initialize
+        }
+        // otherwise start reading and write value:
+        // first get the address from the box:
+        // QString readAddressString = ui->txtInputAddress->text(); // NOLINT
+        // QString showValue;
+        uintptr_t targetAddress = reinterpret_cast<uintptr_t>(StringToAddress(m_Address.GetProxy().Get()));
+        auto targetReadingAddress = (LPCVOID) targetAddress; // NOLINT
+        int type = dataType.GetProxy().Get(); // get the data type from the box
+        HANDLE targetHandle = gameHandle.GetProxy().Get(); // get the handle from the global variable
+        switch (type) {
+            case 0: // this is int
+                ReadProcessMemory(targetHandle, targetReadingAddress, &readValueInt.GetProxy().Get(),
+                                  sizeof(int), nullptr);
+                m_Value = std::to_string(readValueInt.GetProxy().Get());
+                break;
+            case 1:
+                ReadProcessMemory(targetHandle, targetReadingAddress, &readValueFloat.GetProxy().Get(), sizeof(float),
+                                  NULL);
+                m_Value = std::to_string(readValueFloat.GetProxy().Get());
+                break;
+            case 2:
+                ReadProcessMemory(targetHandle, targetReadingAddress, &readValueDouble.GetProxy().Get(),
+                                  sizeof(double), NULL);
+                m_Value = std::to_string(readValueDouble.GetProxy().Get());
+                break;
+            case 3:
+                ReadProcessMemory(targetHandle, targetReadingAddress, &readValuePtr.GetProxy().Get(), sizeof(int),
+                                  NULL);
+                m_Value = std::format("0x{:X}", readValuePtr.GetProxy().Get()); // format as hex
+                break;
+            default:
+                ReadProcessMemory(targetHandle, targetReadingAddress, &readValueInt.GetProxy().Get(),
+                                  sizeof(int), NULL);
+                m_Value = std::to_string(readValueInt.GetProxy().Get());
+                break;
+        }
     }
 
 public:
     Atomic<std::string> m_GameName;
 
+    Atomic<std::string> m_Address;
+    Atomic<std::string> m_Value;
+
     // global variables
-    Atomic<HWND> gameWindowHandle = nullptr;
+    // Atomic<HWND> gameWindowHandle = nullptr;
     Atomic<DWORD> gameProcessID = 0;
     Atomic<HANDLE> gameHandle = nullptr;
+
+    Atomic<int> dataType = 0; // 0 for int, 1 for float, 2 for double, 3 for pointer
 
     // last read value as global variable
     Atomic<int> readValueInt = 0;
